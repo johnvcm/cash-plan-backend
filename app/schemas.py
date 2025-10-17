@@ -1,8 +1,43 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from typing import Optional
 from datetime import date, datetime
 
 
+# User Schemas
+class UserBase(BaseModel):
+    email: EmailStr
+    username: str
+    full_name: Optional[str] = None
+
+
+class UserCreate(UserBase):
+    password: str
+
+
+class UserLogin(BaseModel):
+    username: str
+    password: str
+
+
+class User(UserBase):
+    id: int
+    is_active: int
+    created_at: Optional[datetime] = None
+    
+    class Config:
+        from_attributes = True
+
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+
+class TokenData(BaseModel):
+    user_id: Optional[int] = None
+
+
+# Account Schemas
 class AccountBase(BaseModel):
     name: str
     bank: str

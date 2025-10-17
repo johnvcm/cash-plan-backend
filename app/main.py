@@ -1,8 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import accounts, credit_cards, transactions, investments, goals
+from app.routers import auth, accounts, credit_cards, transactions, investments, goals
 
-app = FastAPI(title="Cash Plan API", version="1.0.0")
+app = FastAPI(title="Cash Plan API", version="2.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -12,6 +12,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Auth router (não requer autenticação)
+app.include_router(auth.router)
+
+# Routers protegidos (vamos adicionar autenticação depois)
 app.include_router(accounts.router)
 app.include_router(credit_cards.router)
 app.include_router(transactions.router)
