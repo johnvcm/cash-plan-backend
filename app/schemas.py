@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr
-from typing import Optional
+from typing import Optional, List
 from datetime import date, datetime
 
 
@@ -178,6 +178,74 @@ class Goal(GoalBase):
     id: int
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+# Shopping List Schemas
+class ShoppingItemBase(BaseModel):
+    name: str
+    category: str
+    quantity: str
+    estimated_price: float = 0.0
+    actual_price: Optional[float] = None
+    is_purchased: bool = False
+    notes: Optional[str] = None
+    order: int = 0
+
+
+class ShoppingItemCreate(ShoppingItemBase):
+    pass
+
+
+class ShoppingItemUpdate(BaseModel):
+    name: Optional[str] = None
+    category: Optional[str] = None
+    quantity: Optional[str] = None
+    estimated_price: Optional[float] = None
+    actual_price: Optional[float] = None
+    is_purchased: Optional[bool] = None
+    notes: Optional[str] = None
+    order: Optional[int] = None
+
+
+class ShoppingItem(ShoppingItemBase):
+    id: int
+    shopping_list_id: int
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class ShoppingListBase(BaseModel):
+    name: str
+    month: Optional[str] = None
+    status: str = "active"
+    total_estimated: float = 0.0
+    total_spent: float = 0.0
+
+
+class ShoppingListCreate(ShoppingListBase):
+    items: Optional[List[ShoppingItemCreate]] = []
+
+
+class ShoppingListUpdate(BaseModel):
+    name: Optional[str] = None
+    month: Optional[str] = None
+    status: Optional[str] = None
+    total_estimated: Optional[float] = None
+    total_spent: Optional[float] = None
+
+
+class ShoppingList(ShoppingListBase):
+    id: int
+    items: List[ShoppingItem] = []
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
