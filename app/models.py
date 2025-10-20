@@ -40,6 +40,7 @@ class User(Base):
     investments = relationship("Investment", back_populates="user", cascade="all, delete-orphan")
     goals = relationship("Goal", back_populates="user", cascade="all, delete-orphan")
     shopping_lists = relationship("ShoppingList", back_populates="user", cascade="all, delete-orphan")
+    categories = relationship("Category", back_populates="user", cascade="all, delete-orphan")
 
 
 class Account(Base):
@@ -159,3 +160,17 @@ class ShoppingItem(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     shopping_list = relationship("ShoppingList", back_populates="items")
+
+
+class Category(Base):
+    __tablename__ = "categories"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(100), nullable=False)
+    type = Column(Enum(TransactionType), nullable=False)  # income ou expense
+    is_default = Column(Boolean, nullable=False, default=False)  # True para categorias padrão do sistema
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    user = relationship("User", back_populates="categories")

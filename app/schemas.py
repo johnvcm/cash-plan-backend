@@ -1,5 +1,5 @@
-from pydantic import BaseModel, EmailStr
-from typing import Optional, List
+from pydantic import BaseModel, EmailStr, field_serializer, ConfigDict, model_serializer
+from typing import Optional, List, Any, Dict
 from datetime import date, datetime
 
 
@@ -99,7 +99,7 @@ class CreditCard(CreditCardBase):
 class TransactionBase(BaseModel):
     description: str
     category: str
-    date: date
+    date: str  # Aceitar string (YYYY-MM-DD) ao invés de date
     amount: float
     type: str
     account_id: Optional[int] = None
@@ -112,7 +112,7 @@ class TransactionCreate(TransactionBase):
 class TransactionUpdate(BaseModel):
     description: Optional[str] = None
     category: Optional[str] = None
-    date: Optional[date] = None
+    date: Optional[str] = None  # Aceitar string ao invés de date
     amount: Optional[float] = None
     type: Optional[str] = None
     account_id: Optional[int] = None
@@ -123,8 +123,20 @@ class Transaction(TransactionBase):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
+    @model_serializer(mode='wrap')
+    def serialize_model(self, serializer) -> Dict[str, Any]:
+        """Serializa o modelo completo, convertendo date para string"""
+        data = serializer(self)
+        
+        # Converter date para string se necessário
+        if 'date' in data:
+            date_value = data['date']
+            if isinstance(date_value, date) and not isinstance(date_value, datetime):
+                data['date'] = date_value.isoformat()
+        
+        return data
 
 
 class InvestmentBase(BaseModel):
@@ -246,6 +258,33 @@ class ShoppingList(ShoppingListBase):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+# ==================== CATEGORIES ====================
+
+class CategoryBase(BaseModel):
+    name: str
+    type: str  # "income" ou "expense"
+
+
+class CategoryCreate(CategoryBase):
+    pass
+
+
+class CategoryUpdate(BaseModel):
+    name: Optional[str] = None
+    type: Optional[str] = None
+
+
+class Category(CategoryBase):
+    id: int
+    user_id: int
+    is_default: bool = False
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

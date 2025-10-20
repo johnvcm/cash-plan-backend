@@ -17,6 +17,12 @@ def get_transactions(
     transactions = db.query(models.Transaction).filter(
         models.Transaction.user_id == current_user.id
     ).all()
+    
+    # Converter date para string para evitar erro de serialização
+    for t in transactions:
+        if hasattr(t.date, 'isoformat'):
+            t.date = t.date.isoformat()
+    
     return transactions
 
 
@@ -34,6 +40,11 @@ def get_transaction(
     
     if not transaction:
         raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    # Converter date para string
+    if hasattr(transaction.date, 'isoformat'):
+        transaction.date = transaction.date.isoformat()
+    
     return transaction
 
 
@@ -65,6 +76,11 @@ def create_transaction(
     
     db.commit()
     db.refresh(db_transaction)
+    
+    # Converter date para string
+    if hasattr(db_transaction.date, 'isoformat'):
+        db_transaction.date = db_transaction.date.isoformat()
+    
     return db_transaction
 
 
@@ -122,6 +138,11 @@ def update_transaction(
     
     db.commit()
     db.refresh(db_transaction)
+    
+    # Converter date para string
+    if hasattr(db_transaction.date, 'isoformat'):
+        db_transaction.date = db_transaction.date.isoformat()
+    
     return db_transaction
 
 

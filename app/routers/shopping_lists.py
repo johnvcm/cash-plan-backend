@@ -252,22 +252,37 @@ def update_shopping_item(
     
     update_data = item.model_dump(exclude_unset=True)
     
-    # Atualizar totais da lista
+    # Guardar estados anteriores
     old_estimated = db_item.estimated_price
     old_actual = db_item.actual_price or 0
+    old_is_purchased = db_item.is_purchased
     
+    # Aplicar updates
     for key, value in update_data.items():
         setattr(db_item, key, value)
     
     # Recalcular totais
     new_estimated = db_item.estimated_price
     new_actual = db_item.actual_price or 0
+    new_is_purchased = db_item.is_purchased
     
+    # Atualizar total_estimated
     shopping_list.total_estimated += (new_estimated - old_estimated)
-    shopping_list.total_spent += (new_actual - old_actual)
+    
+    # Atualizar total_spent baseado em mudanças de is_purchased e actual_price
+    if new_is_purchased and not old_is_purchased:
+        # Item foi marcado como comprado
+        shopping_list.total_spent += new_actual
+    elif not new_is_purchased and old_is_purchased:
+        # Item foi desmarcado como comprado
+        shopping_list.total_spent -= old_actual
+    elif new_is_purchased and old_is_purchased:
+        # Item já estava comprado, mas actual_price mudou
+        shopping_list.total_spent += (new_actual - old_actual)
     
     db.commit()
     db.refresh(db_item)
+    db.refresh(shopping_list)
     return db_item
 
 
