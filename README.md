@@ -150,10 +150,54 @@ cash-plan-backend/
 └── README.md               # Este arquivo
 ```
 
+## Assistente GenAI (Gemini)
+
+O backend inclui um assistente financeiro inteligente baseado no Gemini AI da Google.
+
+### Configuração da API Key
+
+Adicione a chave da API do Gemini no arquivo `.env`:
+
+```env
+GEMINI_API_KEY=sua_chave_aqui
+```
+
+Para obter uma chave gratuita, acesse: https://makersuite.google.com/app/apikey
+
+### Funcionalidades do Assistente
+
+1. **Consultas Inteligentes (Text-to-SQL)**
+
+   - Converte perguntas em linguagem natural para SQL
+   - Executa consultas seguras no banco de dados
+   - Retorna explicações em português
+   - Exemplo: "Quanto gastei este mês?" ou "Qual meu saldo total?"
+
+2. **Inserção de Dados por IA**
+
+   - Adiciona transações, contas, metas e investimentos usando linguagem natural
+   - Exemplo: "Adicionar transação de 50 reais no mercado"
+   - Exemplo: "Criar conta no Banco Inter com saldo de 1000"
+
+3. **Segurança**
+   - Todas as queries são filtradas automaticamente por `user_id`
+   - Validação de SQL para prevenir injection
+   - Apenas comandos SELECT para consultas
+   - Auditoria de comandos perigosos
+
+### Endpoints
+
+- `POST /genai/chat` - Endpoint principal
+  - Parâmetros:
+    - `prompt`: pergunta ou comando do usuário
+    - `action_type`: "query" (consulta) ou "insert" (inserção)
+  - Requer autenticação (token JWT)
+
 ## Próximos passos
 
-1. Criar schemas Pydantic para validação
-2. Implementar rotas CRUD para cada entidade
-3. Adicionar autenticação e autorização
+1. ~~Criar schemas Pydantic para validação~~ ✅
+2. ~~Implementar rotas CRUD para cada entidade~~ ✅
+3. ~~Adicionar autenticação e autorização~~ ✅
 4. Implementar testes automatizados
-5. Adicionar validações de negócio
+5. ~~Adicionar validações de negócio~~ ✅
+6. ~~Integrar assistente GenAI~~ ✅
