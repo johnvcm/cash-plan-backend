@@ -114,3 +114,6 @@ if __name__ == "__main__":
     print("\n🌱 Iniciando seed de categorias padrão...\n")
     seed_categories()
 
+
+
+
