@@ -18,7 +18,6 @@ def get_transactions(
         models.Transaction.user_id == current_user.id
     ).all()
     
-    # Converter date para string para evitar erro de serialização
     for t in transactions:
         if hasattr(t.date, 'isoformat'):
             t.date = t.date.isoformat()
@@ -41,7 +40,6 @@ def get_transaction(
     if not transaction:
         raise HTTPException(status_code=404, detail="Transaction not found")
     
-    # Converter date para string
     if hasattr(transaction.date, 'isoformat'):
         transaction.date = transaction.date.isoformat()
     
@@ -61,7 +59,6 @@ def create_transaction(
     )
     db.add(db_transaction)
     
-    # Atualizar saldo da conta se account_id foi fornecido
     if transaction.account_id:
         account = db.query(models.Account).filter(
             models.Account.id == transaction.account_id,
@@ -77,7 +74,6 @@ def create_transaction(
     db.commit()
     db.refresh(db_transaction)
     
-    # Converter date para string
     if hasattr(db_transaction.date, 'isoformat'):
         db_transaction.date = db_transaction.date.isoformat()
     
@@ -100,12 +96,10 @@ def update_transaction(
     if not db_transaction:
         raise HTTPException(status_code=404, detail="Transaction not found")
     
-    # Guardar valores antigos para reverter o saldo
     old_account_id = db_transaction.account_id
     old_amount = db_transaction.amount
     old_type = db_transaction.type
     
-    # Reverter saldo da conta antiga se houver
     if old_account_id:
         old_account = db.query(models.Account).filter(
             models.Account.id == old_account_id,
@@ -115,15 +109,13 @@ def update_transaction(
         if old_account:
             if old_type == "income":
                 old_account.balance -= old_amount
-            else:  # expense
+            else:
                 old_account.balance += old_amount
     
-    # Atualizar a transação
     update_data = transaction.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(db_transaction, key, value)
     
-    # Aplicar novo saldo na conta (pode ser a mesma ou diferente)
     if db_transaction.account_id:
         new_account = db.query(models.Account).filter(
             models.Account.id == db_transaction.account_id,
@@ -139,7 +131,6 @@ def update_transaction(
     db.commit()
     db.refresh(db_transaction)
     
-    # Converter date para string
     if hasattr(db_transaction.date, 'isoformat'):
         db_transaction.date = db_transaction.date.isoformat()
     
@@ -161,7 +152,6 @@ def delete_transaction(
     if not db_transaction:
         raise HTTPException(status_code=404, detail="Transaction not found")
     
-    # Reverter saldo da conta antes de deletar
     if db_transaction.account_id:
         account = db.query(models.Account).filter(
             models.Account.id == db_transaction.account_id,
@@ -171,7 +161,7 @@ def delete_transaction(
         if account:
             if db_transaction.type == "income":
                 account.balance -= db_transaction.amount
-            else:  # expense
+            else:
                 account.balance += db_transaction.amount
     
     db.delete(db_transaction)
