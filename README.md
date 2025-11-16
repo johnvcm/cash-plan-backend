@@ -1,5 +1,9 @@
 # Cash Plan Backend
 
+**Autor:** João Victor Monteiro de Macedo  
+**Email:** joaovicmonterio.m@gmail.com  
+**Matrícula UERJ:** 201920458011
+
 API REST desenvolvida em Python para gestão financeira pessoal. Implementa operações CRUD sobre entidades financeiras e um agente conversacional baseado em linguagem natural para consultas e inserções de dados.
 
 ## Tecnologias e Dependências
