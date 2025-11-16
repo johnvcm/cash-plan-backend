@@ -10,14 +10,10 @@ router = APIRouter(prefix="/categories", tags=["categories"])
 
 @router.get("/", response_model=List[schemas.Category])
 def get_categories(
-    type: str = None,  # Filtrar por tipo: "income" ou "expense"
+    type: str = None,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_active_user)
 ):
-    """
-    Retorna todas as categorias do usuário autenticado (padrão + customizadas)
-    Opcionalmente filtra por tipo (income/expense)
-    """
     query = db.query(models.Category).filter(
         models.Category.user_id == current_user.id
     )
@@ -53,7 +49,6 @@ def create_category(
     current_user: models.User = Depends(get_current_active_user)
 ):
     """Cria uma nova categoria customizada para o usuário"""
-    # Verificar se já existe uma categoria com esse nome para o usuário
     existing = db.query(models.Category).filter(
         models.Category.user_id == current_user.id,
         models.Category.name == category.name,
@@ -69,7 +64,7 @@ def create_category(
     db_category = models.Category(
         **category.model_dump(),
         user_id=current_user.id,
-        is_default=False  # Categorias criadas pelo usuário nunca são padrão
+        is_default=False
     )
     db.add(db_category)
     db.commit()
@@ -93,7 +88,6 @@ def update_category(
     if not db_category:
         raise HTTPException(status_code=404, detail="Category not found")
     
-    # Não permitir editar categorias padrão
     if db_category.is_default:
         raise HTTPException(
             status_code=403,
@@ -124,7 +118,6 @@ def delete_category(
     if not db_category:
         raise HTTPException(status_code=404, detail="Category not found")
     
-    # Não permitir deletar categorias padrão
     if db_category.is_default:
         raise HTTPException(
             status_code=403,
@@ -134,6 +127,7 @@ def delete_category(
     db.delete(db_category)
     db.commit()
     return None
+
 
 
 

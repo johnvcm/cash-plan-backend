@@ -58,9 +58,6 @@ def create_shopping_list(
     current_user: models.User = Depends(get_current_active_user)
 ):
     """Cria uma nova lista de compras"""
-    print(f"📥 Recebendo lista: name={shopping_list.name}, month={shopping_list.month}, status={shopping_list.status}")
-    
-    # Criar a lista
     db_list = models.ShoppingList(
         user_id=current_user.id,
         name=shopping_list.name,
@@ -70,11 +67,9 @@ def create_shopping_list(
         total_spent=shopping_list.total_spent
     )
     
-    print(f"💾 Salvando no DB: name={db_list.name}, month={db_list.month}, status={db_list.status}")
     db.add(db_list)
-    db.flush()  # Para obter o ID antes de adicionar itens
+    db.flush()
     
-    # Adicionar itens se fornecidos
     if shopping_list.items:
         for item_data in shopping_list.items:
             db_item = models.ShoppingItem(
@@ -92,8 +87,8 @@ def create_shopping_list(
 def update_shopping_list(
     list_id: int,
     shopping_list: schemas.ShoppingListUpdate,
-    create_transactions: bool = False,  # Novo parâmetro
-    account_id: int = None,  # Conta para deduzir
+    create_transactions: bool = False,
+    account_id: int = None,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_active_user)
 ):
@@ -108,13 +103,10 @@ def update_shopping_list(
     
     update_data = shopping_list.model_dump(exclude_unset=True)
     
-    # Se mudar para completed, salvar timestamp e criar transações se solicitado
     if update_data.get("status") == "completed" and db_list.status != "completed":
         update_data["completed_at"] = datetime.utcnow()
         
-        # Criar transações se solicitado
         if create_transactions and db_list.total_spent > 0:
-            # Agrupar itens comprados por categoria
             items_by_category = {}
             for item in db_list.items:
                 if item.is_purchased:
@@ -130,21 +122,18 @@ def update_shopping_list(
                     items_by_category[category]["total"] += actual_price
                     items_by_category[category]["items"].append(item.name)
             
-            # Criar uma transação para cada categoria
             transaction_date = update_data.get("completed_at") or datetime.utcnow()
             
             for category, data in items_by_category.items():
-                # Criar descrição com os itens
-                items_list = ", ".join(data["items"][:5])  # Primeiros 5 itens
+                items_list = ", ".join(data["items"][:5])
                 if len(data["items"]) > 5:
                     items_list += f" (+{len(data['items']) - 5} mais)"
                 
                 description = f"Compras - {db_list.name}: {items_list}"
                 
-                # Criar transação
                 transaction = models.Transaction(
                     user_id=current_user.id,
-                    account_id=account_id,  # Pode ser None
+                    account_id=account_id,
                     description=description,
                     amount=data["total"],
                     type=models.TransactionType.expense,
@@ -153,7 +142,6 @@ def update_shopping_list(
                 )
                 db.add(transaction)
                 
-                # Atualizar saldo da conta se fornecida
                 if account_id:
                     account = db.query(models.Account).filter(
                         models.Account.id == account_id,
@@ -201,7 +189,6 @@ def create_shopping_item(
     current_user: models.User = Depends(get_current_active_user)
 ):
     """Adiciona um item à lista de compras"""
-    # Verificar se a lista existe e pertence ao usuário
     shopping_list = db.query(models.ShoppingList).filter(
         models.ShoppingList.id == list_id,
         models.ShoppingList.user_id == current_user.id
@@ -215,8 +202,6 @@ def create_shopping_item(
         **item.model_dump()
     )
     db.add(db_item)
-    
-    # Atualizar total estimado da lista
     shopping_list.total_estimated += item.estimated_price
     
     db.commit()
@@ -233,7 +218,6 @@ def update_shopping_item(
     current_user: models.User = Depends(get_current_active_user)
 ):
     """Atualiza um item da lista de compras"""
-    # Verificar se a lista existe e pertence ao usuário
     shopping_list = db.query(models.ShoppingList).filter(
         models.ShoppingList.id == list_id,
         models.ShoppingList.user_id == current_user.id
@@ -252,32 +236,24 @@ def update_shopping_item(
     
     update_data = item.model_dump(exclude_unset=True)
     
-    # Guardar estados anteriores
     old_estimated = db_item.estimated_price
     old_actual = db_item.actual_price or 0
     old_is_purchased = db_item.is_purchased
     
-    # Aplicar updates
     for key, value in update_data.items():
         setattr(db_item, key, value)
     
-    # Recalcular totais
     new_estimated = db_item.estimated_price
     new_actual = db_item.actual_price or 0
     new_is_purchased = db_item.is_purchased
     
-    # Atualizar total_estimated
     shopping_list.total_estimated += (new_estimated - old_estimated)
     
-    # Atualizar total_spent baseado em mudanças de is_purchased e actual_price
     if new_is_purchased and not old_is_purchased:
-        # Item foi marcado como comprado
         shopping_list.total_spent += new_actual
     elif not new_is_purchased and old_is_purchased:
-        # Item foi desmarcado como comprado
         shopping_list.total_spent -= old_actual
     elif new_is_purchased and old_is_purchased:
-        # Item já estava comprado, mas actual_price mudou
         shopping_list.total_spent += (new_actual - old_actual)
     
     db.commit()
@@ -311,7 +287,6 @@ def delete_shopping_item(
     if not db_item:
         raise HTTPException(status_code=404, detail="Item não encontrado")
     
-    # Atualizar totais da lista
     shopping_list.total_estimated -= db_item.estimated_price
     shopping_list.total_spent -= (db_item.actual_price or 0)
     
@@ -329,7 +304,6 @@ def duplicate_shopping_list(
     current_user: models.User = Depends(get_current_active_user)
 ):
     """Duplica uma lista de compras existente (para reutilizar itens)"""
-    # Buscar lista original
     original_list = db.query(models.ShoppingList).filter(
         models.ShoppingList.id == list_id,
         models.ShoppingList.user_id == current_user.id
@@ -338,7 +312,6 @@ def duplicate_shopping_list(
     if not original_list:
         raise HTTPException(status_code=404, detail="Lista de compras não encontrada")
     
-    # Criar nova lista
     new_list = models.ShoppingList(
         user_id=current_user.id,
         name=new_name,
@@ -350,7 +323,6 @@ def duplicate_shopping_list(
     db.add(new_list)
     db.flush()
     
-    # Copiar itens (resetando preços reais e status de compra)
     total_estimated = 0.0
     for original_item in original_list.items:
         new_item = models.ShoppingItem(

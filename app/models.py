@@ -130,11 +130,11 @@ class ShoppingList(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    name = Column(String(255), nullable=False)  # Ex: "Compras Outubro 2025", "Feira Semanal"
-    month = Column(String(7), nullable=True)  # Ex: "2025-10" para facilitar busca por mês
+    name = Column(String(255), nullable=False)
+    month = Column(String(7), nullable=True)
     status = Column(Enum(ShoppingListStatus), nullable=False, default=ShoppingListStatus.active)
-    total_estimated = Column(Float, nullable=False, default=0.0)  # Total estimado
-    total_spent = Column(Float, nullable=False, default=0.0)  # Total gasto real
+    total_estimated = Column(Float, nullable=False, default=0.0)
+    total_spent = Column(Float, nullable=False, default=0.0)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     completed_at = Column(DateTime(timezone=True), nullable=True)

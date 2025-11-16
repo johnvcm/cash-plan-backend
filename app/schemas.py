@@ -130,7 +130,6 @@ class Transaction(TransactionBase):
         """Serializa o modelo completo, convertendo date para string"""
         data = serializer(self)
         
-        # Converter date para string se necessário
         if 'date' in data:
             date_value = data['date']
             if isinstance(date_value, date) and not isinstance(date_value, datetime):

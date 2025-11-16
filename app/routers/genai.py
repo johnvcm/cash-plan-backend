@@ -13,8 +13,7 @@ from pydantic import BaseModel
 router = APIRouter()
 
 genai.configure(api_key=os.environ.get("GEMINI_API_KEY", ""))
-# Usando gemini-2.0-flash que é rápido e eficiente
-model = genai.GenerativeModel("gemini-2.0-flash")
+model = genai.GenerativeModel("gemini-2.5-flash")
 
 
 class ChatRequest(BaseModel):
@@ -22,30 +21,22 @@ class ChatRequest(BaseModel):
 
 
 def validate_sql_query(query: str) -> tuple[bool, str]:
-    """
-    Valida se a query SQL é segura para execução.
-    Retorna (is_valid, error_message)
-    """
     query_upper = query.upper().strip()
     
-    # Remove comentários SQL e código markdown
     query_clean = re.sub(r'```sql|```', '', query, flags=re.IGNORECASE)
     query_clean = re.sub(r'--.*$', '', query_clean, flags=re.MULTILINE)
     query_clean = query_clean.strip()
     
-    # Lista de comandos perigosos
     dangerous_commands = [
         'DROP', 'DELETE', 'TRUNCATE', 'ALTER', 
         'CREATE', 'GRANT', 'REVOKE', 'EXEC',
         'EXECUTE', 'UPDATE', ';--', 'XP_'
     ]
     
-    # Verifica se contém comandos perigosos para queries de leitura
     for cmd in dangerous_commands:
         if cmd in query_upper:
             return False, f"Comando SQL não permitido: {cmd}"
     
-    # Deve começar com SELECT para queries de leitura
     if not query_upper.startswith('SELECT'):
         return False, "Apenas consultas SELECT são permitidas para leitura"
     
@@ -57,11 +48,6 @@ async def genai_chat(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """
-    Endpoint principal do assistente GenAI.
-    Identifica automaticamente se é uma pergunta ou um comando.
-    """
-    # Verifica se a API key está configurada
     api_key = os.environ.get("GEMINI_API_KEY", "")
     if not api_key:
         raise HTTPException(
@@ -70,7 +56,6 @@ async def genai_chat(
         )
     
     try:
-        # Identifica a intenção do usuário
         intent = await identify_intent(request.prompt)
         
         if intent == "conversation":
@@ -85,17 +70,13 @@ async def genai_chat(
     except Exception as e:
         import traceback
         error_detail = f"Erro no assistente GenAI: {str(e)}\n{traceback.format_exc()}"
-        print(error_detail)  # Log para o console
+        print(error_detail)
         raise HTTPException(status_code=500, detail=str(e))
 
 
 async def identify_intent(prompt: str) -> str:
-    """
-    Identifica a intenção do usuário: 'conversation', 'add_data' ou 'query'
-    """
     prompt_lower = prompt.lower().strip()
     
-    # Cumprimentos e conversação casual (não precisa acessar BD)
     casual_keywords = [
         'oi', 'olá', 'ola', 'hey', 'ei', 'bom dia', 'boa tarde', 'boa noite',
         'tudo bem', 'como vai', 'e ai', 'e aí', 'beleza', 'opa',
@@ -103,11 +84,9 @@ async def identify_intent(prompt: str) -> str:
         'tchau', 'até logo', 'até mais', 'falou'
     ]
     
-    # Se for uma frase muito curta e casual
     if len(prompt_lower) < 20 and any(keyword in prompt_lower for keyword in casual_keywords):
         return "conversation"
     
-    # Palavras-chave que indicam adição de dados
     add_keywords = [
         'adicionar', 'adicione', 'criar', 'crie', 'novo', 'nova',
         'gastei', 'paguei', 'comprei', 'recebi', 'ganhei',
@@ -115,7 +94,6 @@ async def identify_intent(prompt: str) -> str:
         'insira', 'inserir', 'salvar', 'salve'
     ]
     
-    # Palavras-chave que indicam consulta de dados
     query_keywords = [
         'quanto', 'qual', 'quais', 'mostre', 'mostra', 'liste', 'listar',
         'total', 'saldo', 'gastos', 'receitas', 'transações', 'transacoes',
@@ -123,66 +101,54 @@ async def identify_intent(prompt: str) -> str:
         'últimas', 'ultimas', 'esse mês', 'este mês', 'hoje', 'ontem'
     ]
     
-    # Verifica adição de dados
     if any(keyword in prompt_lower for keyword in add_keywords):
         return "add_data"
     
-    # Verifica consulta de dados
     if any(keyword in prompt_lower for keyword in query_keywords):
         return "query"
     
-    # Se contém números e menciona valores (provavelmente é adição)
     import re
     if re.search(r'\d+', prompt) and any(word in prompt_lower for word in ['reais', 'r$', 'de ', 'com ']):
         return "add_data"
     
-    # Por padrão, trata como conversação casual
     return "conversation"
 
 
 async def handle_conversation(prompt: str, current_user: User):
-    """
-    Lida com conversação casual sem precisar acessar o banco de dados
-    """
     user_name = current_user.full_name or current_user.username
-    prompt_lower = prompt.lower()
     
-    # Respostas naturais para cumprimentos
-    if any(word in prompt_lower for word in ['oi', 'olá', 'ola', 'hey', 'ei']):
-        if 'tudo bem' in prompt_lower or 'como vai' in prompt_lower:
-            return {
-                "response": f"Olá, {user_name}! Tudo ótimo por aqui! 😊\n\nComo posso te ajudar com suas finanças hoje?"
-            }
+    system_prompt = f"""
+    Você é um assistente financeiro do app Cash Plan. O usuário atual é {user_name}.
+    
+    Você está conversando de forma natural e amigável com o usuário. Sua função é:
+    - Responder perguntas sobre finanças pessoais de forma educativa
+    - Orientar sobre como usar o sistema
+    - Manter uma conversa natural e empática
+    - Quando apropriado, sugerir funcionalidades do sistema (consultar dados, adicionar transações, etc)
+    
+    IMPORTANTE:
+    - Seja natural, conversacional e amigável
+    - Use português brasileiro
+    - Mantenha respostas concisas mas completas
+    - Se o usuário fizer perguntas que requerem dados do banco, oriente-o a fazer perguntas específicas como "Quanto gastei este mês?" ou "Qual meu saldo total?"
+    - Não invente dados ou informações que você não tem acesso
+    """
+    
+    try:
+        chat = model.start_chat(history=[])
+        response = chat.send_message(f"{system_prompt}\n\nMensagem do usuário: {prompt}")
+        
         return {
-            "response": f"Olá, {user_name}! 👋\n\nEstou aqui para te ajudar com suas finanças. Pode me perguntar sobre seus gastos, adicionar transações, ou o que precisar!"
+            "response": response.text
         }
-    
-    if any(word in prompt_lower for word in ['bom dia', 'boa tarde', 'boa noite']):
-        saudacao = 'Bom dia' if 'bom dia' in prompt_lower else 'Boa tarde' if 'boa tarde' in prompt_lower else 'Boa noite'
+    except Exception as e:
         return {
-            "response": f"{saudacao}, {user_name}! ✨\n\nPronto para te ajudar com suas finanças. O que você precisa?"
+            "response": f"Desculpe, ocorreu um erro ao processar sua mensagem: {str(e)}",
+            "error": True
         }
-    
-    if any(word in prompt_lower for word in ['obrigado', 'obrigada', 'valeu', 'vlw']):
-        return {
-            "response": "Por nada! 😊 Estou sempre aqui quando precisar. Conte comigo!"
-        }
-    
-    if any(word in prompt_lower for word in ['tchau', 'até logo', 'até mais', 'falou']):
-        return {
-            "response": "Até logo! 👋 Qualquer coisa, é só me chamar!"
-        }
-    
-    # Resposta genérica para outras conversas casuais
-    return {
-        "response": f"Entendo, {user_name}! Como posso te ajudar com suas finanças? Posso responder perguntas sobre seus dados ou adicionar novas transações. 💰"
-    }
 
 
 async def handle_query(prompt: str, db: Session, current_user: User):
-    """
-    Lida com perguntas do usuário (apenas leitura - SELECT)
-    """
     try:
         db_schema = get_db_schema()
         user_name = current_user.full_name or current_user.username
@@ -214,7 +180,6 @@ async def handle_query(prompt: str, db: Session, current_user: User):
             "error": True
         }
     
-    # Valida a query antes de executar
     is_valid, clean_query = validate_sql_query(sql_query)
     if not is_valid:
         return {
@@ -222,14 +187,9 @@ async def handle_query(prompt: str, db: Session, current_user: User):
             "error": True
         }
     
-    # Executa a query
     try:
         result = db.execute(text(clean_query)).fetchall()
-        
-        # Converte resultado para formato mais legível
         result_list = [dict(row._mapping) for row in result] if result else []
-        
-        # Pede ao Gemini para explicar os resultados
         explanation_prompt = f"""
         A consulta SQL foi executada com sucesso e retornou os seguintes dados:
         {result_list}
@@ -254,9 +214,6 @@ async def handle_query(prompt: str, db: Session, current_user: User):
 
 
 async def handle_insert(prompt: str, db: Session, current_user: User):
-    """
-    Lida com inserções de dados (transações, contas, metas, etc)
-    """
     from app.models import Transaction, Account, CreditCard, Goal, Investment
     from datetime import datetime, date
     
@@ -277,10 +234,15 @@ async def handle_insert(prompt: str, db: Session, current_user: User):
     
     O usuário quer adicionar dados. Analise o pedido e retorne um JSON com as informações extraídas.
     
+    IMPORTANTE: Se o usuário mencionar MÚLTIPLAS transações na mesma mensagem, retorne um array de transações.
+    
     Exemplos de pedidos e respostas:
     
     Pedido: "Gastei 50 com mercado"
     Resposta: {{"entity_type": "transaction", "data": {{"description": "Mercado", "category": "Alimentação", "date": "{today}", "amount": -50.0, "type": "expense"}}}}
+    
+    Pedido: "Gastei 35 reais com uber, 78 reais com hamburguer e 90 reais com video game"
+    Resposta: {{"entity_type": "transaction", "data": [{{"description": "Uber", "category": "Transporte", "date": "{today}", "amount": -35.0, "type": "expense"}}, {{"description": "Hamburguer", "category": "Alimentação", "date": "{today}", "amount": -78.0, "type": "expense"}}, {{"description": "Video game", "category": "Lazer", "date": "{today}", "amount": -90.0, "type": "expense"}}]}}
     
     Pedido: "Adicionar uma transação de 50 reais no Mercado dia 15/10"
     Resposta: {{"entity_type": "transaction", "data": {{"description": "Mercado", "category": "Alimentação", "date": "2025-10-15", "amount": -50.0, "type": "expense"}}}}
@@ -301,7 +263,11 @@ async def handle_insert(prompt: str, db: Session, current_user: User):
     - amount: valor em float (NEGATIVO para despesas, POSITIVO para receitas)
     - date: formato YYYY-MM-DD (se não especificado, use {today})
     - description: descrição clara da transação
-    - category: categoria apropriada (Alimentação, Transporte, Salário, etc)
+    - category: categoria apropriada (Alimentação, Transporte, Salário, Lazer, etc)
+    
+    Para múltiplas transações:
+    - Se o usuário mencionar várias transações, retorne "data" como um ARRAY de objetos
+    - Cada objeto do array deve ter todos os campos obrigatórios
     
     Para contas:
     - name: nome da conta
@@ -330,7 +296,6 @@ async def handle_insert(prompt: str, db: Session, current_user: User):
     
     try:
         import json
-        # Remove markdown se houver
         response_text = response.text.strip()
         response_text = re.sub(r'```json\s*|\s*```', '', response_text)
         
@@ -345,42 +310,108 @@ async def handle_insert(prompt: str, db: Session, current_user: User):
         entity_type = data.get("entity_type")
         entity_data = data.get("data", {})
         
-        # Adiciona user_id automaticamente
+        if entity_type == "transaction":
+            if isinstance(entity_data, list):
+                created_items = []
+                mensagens = []
+                
+                for trans_data in entity_data:
+                    trans_data["user_id"] = current_user.id
+                    
+                    required_fields = ["description", "amount", "type"]
+                    missing = [f for f in required_fields if f not in trans_data or not trans_data[f]]
+                    if missing:
+                        continue
+                    
+                    if "date" not in trans_data or not trans_data["date"]:
+                        trans_data["date"] = date.today()
+                    elif isinstance(trans_data["date"], str):
+                        try:
+                            trans_data["date"] = datetime.strptime(trans_data["date"], "%Y-%m-%d").date()
+                        except ValueError:
+                            trans_data["date"] = date.today()
+                    
+                    if trans_data.get("type") == "expense" and trans_data.get("amount", 0) > 0:
+                        trans_data["amount"] = -abs(trans_data["amount"])
+                    
+                    if "category" not in trans_data or not trans_data["category"]:
+                        trans_data["category"] = "Outros"
+                    
+                    new_item = Transaction(**trans_data)
+                    db.add(new_item)
+                    created_items.append(new_item)
+                
+                if not created_items:
+                    return {
+                        "response": "Não foi possível criar nenhuma transação. Verifique se forneceu todas as informações necessárias.",
+                        "error": True
+                    }
+                
+                db.commit()
+                
+                for item in created_items:
+                    db.refresh(item)
+                    valor_formatado = f"R$ {abs(item.amount):.2f}"
+                    tipo_texto = "receita" if item.type == "income" else "despesa"
+                    data_formatada = item.date.strftime("%d/%m/%Y")
+                    mensagens.append(f"{item.description} - {valor_formatado} ({tipo_texto}) - {item.category} - {data_formatada}")
+                
+                mensagem = f"{len(created_items)} transação(ões) adicionada(s) com sucesso!\n\n"
+                mensagem += "\n".join(mensagens)
+                
+                return {
+                    "response": mensagem,
+                    "entity_type": entity_type,
+                    "created_ids": [item.id for item in created_items]
+                }
+            else:
+                entity_data["user_id"] = current_user.id
+                
+                required_fields = ["description", "amount", "type"]
+                missing = [f for f in required_fields if f not in entity_data or not entity_data[f]]
+                if missing:
+                    return {
+                        "response": f"Faltam informações para criar a transação: {', '.join(missing)}. Tente descrever com mais detalhes.",
+                        "error": True
+                    }
+                
+                if "date" not in entity_data or not entity_data["date"]:
+                    entity_data["date"] = date.today()
+                elif isinstance(entity_data["date"], str):
+                    try:
+                        entity_data["date"] = datetime.strptime(entity_data["date"], "%Y-%m-%d").date()
+                    except ValueError:
+                        entity_data["date"] = date.today()
+                
+                if entity_data.get("type") == "expense" and entity_data.get("amount", 0) > 0:
+                    entity_data["amount"] = -abs(entity_data["amount"])
+                
+                if "category" not in entity_data or not entity_data["category"]:
+                    entity_data["category"] = "Outros"
+                
+                new_item = Transaction(**entity_data)
+                db.add(new_item)
+                db.commit()
+                db.refresh(new_item)
+                
+                valor_formatado = f"R$ {abs(entity_data['amount']):.2f}"
+                tipo_texto = "receita" if entity_data['type'] == "income" else "despesa"
+                data_formatada = entity_data['date'].strftime("%d/%m/%Y")
+                mensagem = f"Transação adicionada com sucesso!\n\n"
+                mensagem += f"{entity_data['description']}\n"
+                mensagem += f"{valor_formatado} ({tipo_texto})\n"
+                mensagem += f"Categoria: {entity_data['category']}\n"
+                mensagem += f"Data: {data_formatada}"
+                
+                return {
+                    "response": mensagem,
+                    "entity_type": entity_type,
+                    "created_id": new_item.id
+                }
+        
         entity_data["user_id"] = current_user.id
         
-        # Cria a entidade apropriada
-        if entity_type == "transaction":
-            # Validação: campos obrigatórios
-            required_fields = ["description", "amount", "type"]
-            missing = [f for f in required_fields if f not in entity_data or not entity_data[f]]
-            if missing:
-                return {
-                    "response": f"Faltam informações para criar a transação: {', '.join(missing)}. Tente descrever com mais detalhes.",
-                    "error": True
-                }
-            
-            # Validação: data é obrigatória (usa hoje como fallback)
-            if "date" not in entity_data or not entity_data["date"]:
-                entity_data["date"] = date.today()
-            elif isinstance(entity_data["date"], str):
-                # Processa data em string
-                try:
-                    entity_data["date"] = datetime.strptime(entity_data["date"], "%Y-%m-%d").date()
-                except ValueError:
-                    entity_data["date"] = date.today()
-            
-            # Validação: garante que amount é negativo para despesas
-            if entity_data.get("type") == "expense" and entity_data.get("amount", 0) > 0:
-                entity_data["amount"] = -abs(entity_data["amount"])
-            
-            # Validação: category padrão se não fornecida
-            if "category" not in entity_data or not entity_data["category"]:
-                entity_data["category"] = "Outros"
-            
-            new_item = Transaction(**entity_data)
-            item_name = "transação"
-            
-        elif entity_type == "account":
+        if entity_type == "account":
             new_item = Account(**entity_data)
             item_name = "conta"
             
@@ -401,23 +432,10 @@ async def handle_insert(prompt: str, db: Session, current_user: User):
                 "error": True
             }
         
-        # Salva no banco
         db.add(new_item)
         db.commit()
         db.refresh(new_item)
-        
-        # Cria mensagem de confirmação personalizada
-        if entity_type == "transaction":
-            valor_formatado = f"R$ {abs(entity_data['amount']):.2f}"
-            tipo_texto = "receita" if entity_data['type'] == "income" else "despesa"
-            data_formatada = entity_data['date'].strftime("%d/%m/%Y")
-            mensagem = f"Transação adicionada com sucesso!\n\n"
-            mensagem += f"{entity_data['description']}\n"
-            mensagem += f"{valor_formatado} ({tipo_texto})\n"
-            mensagem += f"Categoria: {entity_data['category']}\n"
-            mensagem += f"Data: {data_formatada}"
-        else:
-            mensagem = f"{item_name.capitalize()} adicionada com sucesso!"
+        mensagem = f"{item_name.capitalize()} adicionada com sucesso!"
         
         return {
             "response": mensagem,

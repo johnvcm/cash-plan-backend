@@ -6,16 +6,13 @@ app = FastAPI(title="Cash Plan API", version="2.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Em produção, especifique os domínios permitidos
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Auth router (não requer autenticação)
 app.include_router(auth.router)
-
-# Routers protegidos (vamos adicionar autenticação depois)
 app.include_router(accounts.router)
 app.include_router(credit_cards.router)
 app.include_router(transactions.router)
